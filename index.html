@@ -352,6 +352,7 @@
             let pushBody = `erzielt durch ${cleanPlayer},${minStr}\nSpielstand: ${home} : ${away} (${homeScore}:${awayScore})`;
 
             try {
+                // 1. Spielstand in sent_goals_uel aktualisieren
                 await supabaseClient.from('sent_goals_uel').upsert({
                     match_id: String(matchId),
                     home_score: homeScore,
@@ -359,6 +360,16 @@
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'match_id' });
 
+                // 2. Einzeltor in goal_history_uel loggen (genau wie in der Champions League)
+                if (latestScorer) {
+                    let goalIdKey = `uel_${matchId}_${cleanPlayer}_${latestScorer.match(/\d+['']/)?.[0] || '1'}`;
+                    await supabaseClient.from('goal_history_uel').upsert({
+                        goal_id: goalIdKey,
+                        created_at: new Date().toISOString()
+                    }, { onConflict: 'goal_id' });
+                }
+
+                // 3. Push-Benachrichtigung senden
                 await fetch(`${SUPABASE_URL}/functions/v1/send-push`, {
                     method: 'POST',
                     mode: 'cors',
