@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⭐ UEFA Europa League</title>
+    <title>⭐ UEFA Europa League — PRO Dashboard</title>
     
     <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -80,6 +80,11 @@
         button, select { background: #21262d; color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; transition: background 0.2s; }
         button:hover, select:hover { background: #30363d; border-color: var(--accent-color); }
         select { padding-right: 30px; }
+
+        /* Live Polling Schalter Styling */
+        .polling-toggle-btn { display: inline-flex; align-items: center; gap: 8px; font-weight: bold; }
+        .polling-toggle-btn.active { background: rgba(255, 102, 0, 0.15); border-color: var(--accent-color); color: var(--accent-color); }
+        .polling-toggle-btn.inactive { background: #21262d; border-color: var(--border-color); color: var(--text-muted); }
 
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .dash-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
@@ -219,6 +224,9 @@
             <button onclick="changeMatchday(-1)">◄ Vorheriger</button>
             <select id="matchdaySelect" onchange="loadMatchday(this.value)"></select>
             <button onclick="changeMatchday(1)">Nächster ►</button>
+            <button id="pollingToggleBtn" class="polling-toggle-btn inactive" onclick="toggleLivePolling()">
+                <span id="pollingIcon">🔴</span> Live-Polling: <span id="pollingStateText">Aus</span>
+            </button>
             <button onclick="subscribePush()" style="background: var(--accent-color); color: #fff; font-weight: bold;">🔔 Tor-Alarm aktivieren</button>
         </div>
 
@@ -293,7 +301,10 @@
         let globalTopAssists = [];
         let globalYellowCards = [];
         let sentGoalsCache = {};
+        
         let smartPollingInterval = null;
+        let isLivePollingEnabled = false;
+        
         let playerPhotoCache = {};
 
         function fetchAndCachePlayerPhoto(playerId, fallbackUrl = '') {
@@ -320,6 +331,28 @@
                 }
             } catch (e) {}
             return null;
+        }
+
+        function toggleLivePolling() {
+            isLivePollingEnabled = !isLivePollingEnabled;
+            const btn = document.getElementById("pollingToggleBtn");
+            const icon = document.getElementById("pollingIcon");
+            const stateText = document.getElementById("pollingStateText");
+
+            if (isLivePollingEnabled) {
+                btn.className = "polling-toggle-btn active";
+                icon.textContent = "🟢";
+                stateText.textContent = "An";
+                if (currentMatchday) loadMatchday(currentMatchday, true);
+            } else {
+                btn.className = "polling-toggle-btn inactive";
+                icon.textContent = "🔴";
+                stateText.textContent = "Aus";
+                if (smartPollingInterval) {
+                    clearInterval(smartPollingInterval);
+                    smartPollingInterval = null;
+                }
+            }
         }
 
         async function init() {
@@ -533,15 +566,21 @@
         function hideGoalAlert() { document.getElementById("goalAlertBanner").style.display = "none"; }
 
         function manageSmartPolling(hasLiveGames) {
-            if (hasLiveGames && !smartPollingInterval) {
-                smartPollingInterval = setInterval(() => {
-                    if (currentMatchday) loadMatchday(currentMatchday, true);
-                    loadTable();
-                }, 60000);
-            } else if (!hasLiveGames && smartPollingInterval) {
+            if (smartPollingInterval) {
                 clearInterval(smartPollingInterval);
                 smartPollingInterval = null;
             }
+
+            if (!isLivePollingEnabled) return;
+
+            const pollingIntervalTime = hasLiveGames ? 30000 : 120000;
+
+            smartPollingInterval = setInterval(() => {
+                if (currentMatchday && isLivePollingEnabled) {
+                    loadMatchday(currentMatchday, true);
+                    loadTable();
+                }
+            }, pollingIntervalTime);
         }
 
         async function loadTopScorers() {
